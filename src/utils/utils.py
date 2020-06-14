@@ -4,8 +4,8 @@ import torch.nn as nn
 import matplotlib
 import matplotlib.pyplot as plt
 
-def make_mlp(input_dim, hidden_dims, output_dim, activation_fn, output_activation_fn):
-    layer_arr = [input_dim] + hidden_dims + [output_dim]
+def make_mlp(input_dim, hidden_dims, output_dim, activation_fn, output_activation_fn=nn.Identity):
+    layer_arr = [input_dim] + list(hidden_dims) + [output_dim]
     model = []
 
     for i in range(len(layer_arr) - 1):
