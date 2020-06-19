@@ -14,18 +14,18 @@ class PolicyGradient:
     Try again with a clean slate. This time only discrete.
     """
 
-    def __init__(self, env, input_dim, action_dim, episode_limit,
+    def __init__(self, env, episode_limit=5000,
                  policy_layers=(32,), policy_lr=0.01, gamma=1):
         """
         Constructor for Policy Gradient Class.
         """
         self.env = env
-        self.input_dim = input_dim
-        self.action_dim = action_dim
-        self.episode_limit = 5000  # number of timesteps to collect per step
+        self.input_dim = env.observation_space.shape[0]
+        self.action_dim = env.action_space.n
+        self.episode_limit = episode_limit  # number of timesteps to collect per step
         self.gamma = gamma
 
-        layer_arr = [input_dim] + list(policy_layers) + [action_dim]
+        layer_arr = [self.input_dim] + list(policy_layers) + [self.action_dim]
         self.policy_network = make_mlp(layer_arr, nn.Tanh, nn.Softmax)
         self.policy_lr = policy_lr
 
@@ -36,6 +36,7 @@ class PolicyGradient:
         Get the policy's distribution given a state
         """
         logits = self.policy_network(obs)
+        # VERY IMPORTANT: MAKE SURE YOU ADD THE LOGITS KEYWORD... OTHERWISE IT DEFAULTS TO 'PROBS='
         dist = Categorical(logits=logits)
         return dist
 
@@ -158,14 +159,14 @@ class PolicyGradient:
         # print(return_arr)
         # print('POLICY LOSS')
         # print(policy_loss)
-        print(state_arr)
+        # print(state_arr)
 
         return policy_loss.detach().numpy().squeeze(), return_arr, eps_len
 
 
 # Run the Policy Gradient here for now
 env = gym.make('CartPole-v1')
-pg = PolicyGradient(env, 4, 2, 420)
+pg = PolicyGradient(env, 5000)
 
 epochs = int(1e6)
 for i in range(epochs):
