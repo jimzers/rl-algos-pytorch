@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 
+import numpy as np
+import math
+
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -18,3 +21,17 @@ def make_mlp(layer_arr, activation_fn, output_activation_fn=nn.Identity):
     model += [output_activation_fn()]
 
     return nn.Sequential(*model)
+
+
+def init_weights(layer):
+    if type(layer) == nn.Linear:
+        f = 1 / np.sqrt(layer.weight.data.size()[0])
+        torch.nn.init.uniform_(layer.weight.data, -f, f)
+        torch.nn.init.uniform_(layer.bias.data, -f, f)
+
+
+def init_xav_weights(layer):
+    if type(layer) == nn.Linear:
+        f_xavier = math.sqrt(6.0 / (layer.weight.data.size(1) + layer.weight.data.size(0)))
+        torch.nn.init.uniform_(layer.weight.data, -f_xavier, f_xavier)
+        torch.nn.init.uniform_(layer.bias.data, -f_xavier, f_xavier)
