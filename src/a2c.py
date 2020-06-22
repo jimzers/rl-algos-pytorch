@@ -1,4 +1,7 @@
 import torch
+import torch.nn as nn
+
+from utils.utils import make_mlp
 
 class ActorNetwork:
     ...
@@ -18,13 +21,24 @@ class A2CAgent:
     No replay memory
     Use onpolicy RL because no expperience replay
 
+    For advantage function, you only need a value fn estimator.
+    adv = r_(t+1) + V(S_(t+1)) - V(S_t)
+
+    Update the actor and critic networks based on mod fn from counter.
+    No need to polyak average for naive implementation.
+
+    take action a based on policy using Q estimate
 
 
 
     """
 
     def __init__(self):
-        ...
+        """
+        What needs to be here:
+        initialize the actor and critic networks.
+
+        """
 
     def choose_action(self):
         ...
