@@ -103,6 +103,9 @@ class A2CAgent:
         self.critic.apply(init_xav_weights)
 
     def choose_action(self, state):
+        """
+        Chooses an action given an observation.
+        """
         self.actor.eval()
         obs = torch.tensor(state, dtype=torch.float).to(self.actor.device)
         # get action from actor
@@ -113,6 +116,10 @@ class A2CAgent:
         return np.clip(action, self.low, self.high)
 
     def train(self):
+        """
+        Steps to take here:
+
+        """
         ...
 
 import gym
