@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 import numpy as np
 from torch.distributions import Normal
+from torch.optim import Adam
 
 from utils.utils import make_mlp, init_xav_weights, init_weights
 
@@ -13,6 +14,7 @@ class ActorNetwork(nn.Module):
     Actor thingy. Gonna try this instead of a helper fn, might be easier to understand and structure
     This actor is diagonal gaussian
     """
+
     def __init__(self, obs_dim, hidden_size, action_dim):
         super(ActorNetwork, self).__init__()
         self.fc1 = nn.Linear(obs_dim, hidden_size)
@@ -39,6 +41,7 @@ class ActorNetwork(nn.Module):
         policy_dist = self.distribution(state)
         log_prob = None
         if action:
+            # TODO: fix the action here if it's not in the right format
             log_prob = policy_dist.log_prob(action).sum(axis=-1)
         return policy_dist, log_prob
 
@@ -82,7 +85,7 @@ class A2CAgent:
 
     """
 
-    def __init__(self, env, hidden_size=64):
+    def __init__(self, env, hidden_size=64, actor_lr=0.01, critic_lr=0.01):
         """
         What needs to be here:
         initialize the actor and critic networks.
@@ -102,6 +105,9 @@ class A2CAgent:
         self.critic = self.critic.to(self.critic.device)
         self.critic.apply(init_xav_weights)
 
+        self.actor_optimizer = Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_optimizer = Adam(self.critic.parameters(), lr=critic_lr)
+
     def choose_action(self, state):
         """
         Chooses an action given an observation.
@@ -118,14 +124,82 @@ class A2CAgent:
     def train(self):
         """
         Steps to take here:
+        grab the entire trajectory first
 
         """
-        ...
+
+        rewards_arr = []
+        log_likelihood_arr = []
+        value_arr = []
+
+        obs = self.env.reset()
+        done = False
+
+        # self.actor.eval()
+        # self.critic.eval()
+
+        while not done:
+
+            action = self.choose_action(obs)
+            obs_n, r, done, info = self.env.step(action)
+
+            # store reward
+            rewards_arr.append(r)
+
+            # store log likelihood
+            _, log_likelihood = self.actor.forward(torch.tensor(obs, dtype=torch.float).to(self.actor.device),
+                                                   torch.tensor(action, dtype=torch.float32).to(self.actor.device))
+            log_likelihood_arr.append(log_likelihood)
+
+            # value estimate at this current state
+            value_est = self.critic(torch.tensor(obs, dtype=torch.float).to(self.critic.device))
+            value_arr.append(value_est)
+
+            # on to the next!
+            obs = obs_n
+
+        advantage_arr = np.zeros(len(value_arr))
+        # get advantages
+        # TODO: change it so that you only get timesteps to T-1
+        for t in reversed(range(len(value_arr))):
+            # adv = r_(t+1) + V(S_(t+1)) - V(S_t)
+            if t == len(value_arr) - 1:
+                adv = -value_arr[t]
+            else:
+                adv = rewards_arr[t + 1] + value_arr[t + 1] - value_arr[t]
+
+            advantage_arr[t] = adv
+
+        # self.actor.train()
+        # self.critic.train()
+
+        self.actor_optimizer.zero_grad()
+        actor_loss = (torch.tensor(log_likelihood_arr, dtype=torch.float32, requires_grad=True) *
+                      torch.tensor(advantage_arr, dtype=torch.float32, requires_grad=True)).mean()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+
+        self.critic_optimizer.zero_grad()
+        critic_loss = torch.tensor(advantage_arr, dtype=torch.float32, requires_grad=True).pow(2).mean()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+
+        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(rewards_arr)
+
 
 import gym
+
 env = gym.make('InvertedPendulum-v2')
 agent = A2CAgent(env)
+#
+# s = env.reset()
+# # env.render()
+# s_new, r, d, info = env.step(agent.choose_action(s))
 
-s = env.reset()
-# env.render()
-s_new, r, d, info = env.step(agent.choose_action(s))
+epochs = int(1e6)
+for i in range(epochs):
+    poli_loss, pog, rew_arr, e_len = agent.train()
+    # print(sum(r_arr))
+    if i % 1000 == 0:
+        print('epoch: %3d \t policy loss: %.3f \t value fn loss: %.3f \t return: %.3f \t avg_ep_len: %.3f' %
+              (i, poli_loss, pog, sum(rew_arr), e_len))
