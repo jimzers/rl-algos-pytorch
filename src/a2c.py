@@ -135,8 +135,8 @@ class A2CAgent:
         obs = self.env.reset()
         done = False
 
-        # self.actor.eval()
-        # self.critic.eval()
+        self.actor.eval()
+        self.critic.eval()
 
         while not done:
 
@@ -159,23 +159,33 @@ class A2CAgent:
             obs = obs_n
 
         advantage_arr = np.zeros(len(value_arr))
+        return_arr = np.zeros(len(value_arr))
+        # for debugging
+        q_arr = np.zeros(len(value_arr))
+
         # get advantages
         # TODO: change it so that you only get timesteps to T-1
         for t in reversed(range(len(value_arr))):
+            if t == len(value_arr) - 1:
+                return_arr[t] = rewards_arr[t]
+            else:
+                return_arr[t] = rewards_arr[t] + return_arr[t + 1]
+
             # adv = r_(t+1) + V(S_(t+1)) - V(S_t)
             if t == len(value_arr) - 1:
                 adv = -value_arr[t]
             else:
-                adv = rewards_arr[t + 1] + value_arr[t + 1] - value_arr[t]
+                adv = return_arr[t + 1] + value_arr[t + 1] - value_arr[t]
 
             advantage_arr[t] = adv
+            q_arr[t] = return_arr[t] + value_arr[t]
 
-        # self.actor.train()
-        # self.critic.train()
+        self.actor.train()
+        self.critic.train()
 
         self.actor_optimizer.zero_grad()
         actor_loss = (torch.tensor(log_likelihood_arr, dtype=torch.float32, requires_grad=True) *
-                      torch.tensor(advantage_arr, dtype=torch.float32, requires_grad=True)).mean()
+                      torch.tensor(advantage_arr, dtype=torch.float32)).mean()
         actor_loss.backward()
         self.actor_optimizer.step()
 
@@ -184,7 +194,7 @@ class A2CAgent:
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(rewards_arr)
+        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(rewards_arr), q_arr, advantage_arr, value_arr
 
 
 import gym
@@ -198,8 +208,15 @@ agent = A2CAgent(env)
 
 epochs = int(1e6)
 for i in range(epochs):
-    poli_loss, pog, rew_arr, e_len = agent.train()
+    poli_loss, pog, rew_arr, e_len, q_log_arr, adv_log_arr, val_log_arr = agent.train()
     # print(sum(r_arr))
     if i % 1000 == 0:
         print('epoch: %3d \t policy loss: %.3f \t value fn loss: %.3f \t return: %.3f \t avg_ep_len: %.3f' %
               (i, poli_loss, pog, sum(rew_arr), e_len))
+        print('q arr:')
+        print(q_log_arr)
+        print('adv arr:')
+        print(adv_log_arr)
+        print('val arr:')
+        print(val_log_arr)
+
