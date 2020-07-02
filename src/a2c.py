@@ -184,7 +184,7 @@ class A2CAgent:
         self.critic.train()
 
         self.actor_optimizer.zero_grad()
-        actor_loss = (torch.tensor(log_likelihood_arr, dtype=torch.float32, requires_grad=True) *
+        actor_loss = -(torch.tensor(log_likelihood_arr, dtype=torch.float32, requires_grad=True) *
                       torch.tensor(advantage_arr, dtype=torch.float32)).mean()
         actor_loss.backward()
         self.actor_optimizer.step()
