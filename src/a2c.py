@@ -175,7 +175,7 @@ class A2CAgent:
             if t == len(value_arr) - 1:
                 adv = -value_arr[t]
             else:
-                adv = return_arr[t + 1] + value_arr[t + 1] - value_arr[t]
+                adv = rewards_arr[t + 1] + value_arr[t + 1] - value_arr[t]
 
             advantage_arr[t] = adv
             q_arr[t] = return_arr[t] + value_arr[t]
