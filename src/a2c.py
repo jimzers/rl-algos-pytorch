@@ -135,8 +135,8 @@ class A2CAgent:
         obs = self.env.reset()
         done = False
 
-        self.actor.eval()
-        self.critic.eval()
+        # self.actor.eval()
+        # self.critic.eval()
 
         while not done:
 
@@ -149,16 +149,20 @@ class A2CAgent:
             # store log likelihood
             _, log_likelihood = self.actor.forward(torch.tensor(obs, dtype=torch.float).to(self.actor.device),
                                                    torch.tensor(action, dtype=torch.float32).to(self.actor.device))
+            # print(log_likelihood.shape)
+            # print(log_likelihood)
             log_likelihood_arr.append(log_likelihood)
 
             # value estimate at this current state
             value_est = self.critic(torch.tensor(obs, dtype=torch.float).to(self.critic.device))
+            # print(value_est.shape)
+            # print(value_est)
             value_arr.append(value_est)
 
             # on to the next!
             obs = obs_n
 
-        advantage_arr = np.zeros(len(value_arr))
+        advantage_arr = []
         return_arr = np.zeros(len(value_arr))
         # for debugging
         q_arr = np.zeros(len(value_arr))
@@ -177,20 +181,35 @@ class A2CAgent:
             else:
                 adv = rewards_arr[t + 1] + value_arr[t + 1] - value_arr[t]
 
-            advantage_arr[t] = adv
-            q_arr[t] = return_arr[t] + value_arr[t]
+            advantage_arr.insert(0, adv)
+            q_arr[t] = rewards_arr[t] + value_arr[t]
 
-        self.actor.train()
-        self.critic.train()
+        # NOTE: WHY IS THE VALUE FUNCTION NOT MOVING? THE ADVANTAGE FN IS BASICALLY THE SAME VALUE AS THE
+        # it seems right now that the value function is not making too much progress right now,, but the policy loss is improving
+        # why is the advantage metric not getting smaller????
+        # BROOOOO MAKE THE ADVANTAGE METRIC SMALLER PLEASE
+
+        # self.actor.train()
+        # self.critic.train()
 
         self.actor_optimizer.zero_grad()
-        actor_loss = -(torch.tensor(log_likelihood_arr, dtype=torch.float32, requires_grad=True) *
-                      torch.tensor(advantage_arr, dtype=torch.float32)).mean()
+        # print("LOG LIKELIKHOOD")
+        # print(torch.stack(log_likelihood_arr))
+        # print('ADVATAANGE ARR')
+        # print(torch.stack(advantage_arr).squeeze())
+        # print((torch.stack(log_likelihood_arr) * torch.stack(advantage_arr).squeeze()).shape)
+        # actor_loss = -(torch.tensor(log_likelihood_arr, dtype=torch.float32, requires_grad=True) *
+        #               torch.tensor(advantage_arr, dtype=torch.float32)).mean()
+        actor_loss = -(torch.stack(log_likelihood_arr) * torch.stack(advantage_arr).squeeze().detach()).mean()
+
         actor_loss.backward()
         self.actor_optimizer.step()
 
         self.critic_optimizer.zero_grad()
-        critic_loss = torch.tensor(advantage_arr, dtype=torch.float32, requires_grad=True).pow(2).mean()
+        # print(torch.tensor(advantage_arr, dtype=torch.float32, requires_grad=True).shape)
+        # critic_loss = torch.tensor(advantage_arr, dtype=torch.float32, requires_grad=True).pow(2).mean()
+        # critic_loss = (torch.stack(value_arr) - torch.tensor(return_arr, dtype=torch.float32).to(self.critic.device)).pow(2).mean()
+        critic_loss = (torch.stack(advantage_arr).squeeze() ** 2).mean()
         critic_loss.backward()
         self.critic_optimizer.step()
 
