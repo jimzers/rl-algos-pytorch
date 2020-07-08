@@ -147,7 +147,7 @@ class A2CAgentV2:
 
             # store log prob
             dist, log_prob = self.actor(torch.tensor(obs, dtype=torch.float32).to(self.actor.device),
-                                                   torch.tensor(action, dtype=torch.float32).to(self.actor.device))
+                                        torch.tensor(action, dtype=torch.float32).to(self.actor.device))
 
             log_prob_arr.append(log_prob)
 
@@ -197,7 +197,7 @@ class A2CAgentV2:
                 q_arr.insert(0, torch.zeros_like(value_arr[0]))
             else:
                 # is it total_return or rewards_arr[t] ??? it
-                adv = rewards_arr[t] + (self.gamma**(t+1)) * value_arr[t + 1] - (self.gamma ** t) * value_arr[t]
+                adv = rewards_arr[t] + (self.gamma ** (t + 1)) * value_arr[t + 1] - (self.gamma ** t) * value_arr[t]
 
                 q_arr.insert(0, rewards_arr[t] + value_arr[t + 1])
 
@@ -213,7 +213,8 @@ class A2CAgentV2:
         # print(torch.stack(entropy_arr).squeeze().shape)
         # print(torch.stack(entropy_arr).squeeze())
 
-        actor_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean() - self.entropy_coeff * entropy_val
+        actor_loss = -(torch.stack(log_prob_arr) * torch.stack(
+            adv_arr).squeeze().detach()).mean() - self.entropy_coeff * entropy_val
         actor_loss.backward()
         self.actor_optimizer.step()
 
@@ -223,7 +224,7 @@ class A2CAgentV2:
         # print('REWARDS TO GO')
         # print(torch.tensor(return_arr).shape)
 
-        #TODO : see shapes here again. the critic loss is struggling here
+        # TODO : see shapes here again. the critic loss is struggling here
         self.critic_optimizer.zero_grad()
         # print('POGCHAMP')
         # print((torch.stack(value_arr).squeeze() - torch.tensor(return_arr).to(self.critic.device)).shape)
@@ -234,7 +235,9 @@ class A2CAgentV2:
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(rewards_arr), q_arr, adv_arr, value_arr
+        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(
+            rewards_arr), q_arr, adv_arr, value_arr
+
 
 import gym
 
@@ -261,7 +264,8 @@ for i in range(epochs):
     avg_return_arr.append(sum(rew_arr))
     if i % logging_interval == 0:
         print('epoch: %3d \t avg policy loss: %.3f \t avg value fn loss: %.3f \t avg return: %.3f \t avg_ep_len: %.3f' %
-              (i, np.average(avg_policy_loss_arr), np.average(avg_value_loss_arr), np.average(avg_return_arr), np.average(avg_ep_len_arr)))
+              (i, np.average(avg_policy_loss_arr), np.average(avg_value_loss_arr), np.average(avg_return_arr),
+               np.average(avg_ep_len_arr)))
         # print('q arr:')
         # print(q_log_arr)
         # print('adv arr:')
@@ -272,4 +276,3 @@ for i in range(epochs):
         avg_policy_loss_arr = []
         avg_value_loss_arr = []
         avg_return_arr = []
-
