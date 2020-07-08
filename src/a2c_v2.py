@@ -41,7 +41,6 @@ class ActorNetwork(nn.Module):
         policy_dist = self.distribution(state)
         log_prob = None
         if action:
-            # TODO: fix the action here if it's not in the right format
             log_prob = policy_dist.log_prob(action).sum(axis=-1)
         return policy_dist, log_prob
 
@@ -73,7 +72,7 @@ class A2CAgentV2:
     Loss of the value function will be based on the rewards to go, rather than the advantage.
     """
 
-    def __init__(self, env, hidden_size=64, gamma=0.95, actor_lr=0.01, critic_lr=0.01):
+    def __init__(self, env, hidden_size=64, gamma=0.95, entropy_coeff=0.01, actor_lr=0.01, critic_lr=0.01):
         """
         init actor and critic networks
         init weights of actor and critic networks
@@ -88,6 +87,7 @@ class A2CAgentV2:
         self.high = env.action_space.high
 
         self.gamma = gamma
+        self.entropy_coeff = entropy_coeff
 
         self.actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim)
         self.actor = self.actor.to(self.actor.device)
@@ -132,6 +132,8 @@ class A2CAgentV2:
         log_prob_arr = []
         value_arr = []
 
+        entropy_val = None
+
         obs = self.env.reset()
         done = False
 
@@ -144,10 +146,15 @@ class A2CAgentV2:
             rewards_arr.append(r)
 
             # store log prob
-            _, log_prob = self.actor(torch.tensor(obs, dtype=torch.float32).to(self.actor.device),
+            dist, log_prob = self.actor(torch.tensor(obs, dtype=torch.float32).to(self.actor.device),
                                                    torch.tensor(action, dtype=torch.float32).to(self.actor.device))
 
             log_prob_arr.append(log_prob)
+
+            # entropy is based on standard deviation.
+            # the std stays the same until actor is updated so no need to recalc
+            if entropy_val == None:
+                entropy_val = dist.entropy()
 
             # value estimate at current state
             value_est = self.critic(torch.tensor(obs, dtype=torch.float32).to(self.critic.device))
@@ -200,10 +207,13 @@ class A2CAgentV2:
         # print('DEBUG MORE STUFGF')
         # print(torch.stack(log_prob_arr).shape)
         # print(torch.stack(adv_arr).squeeze().detach().shape)
-        # print('POGCHMPION STUFF')
+        # print('END STUFF')
         # print(torch.stack(log_prob_arr))
         # print((torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).shape)
-        actor_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean()
+        # print(torch.stack(entropy_arr).squeeze().shape)
+        # print(torch.stack(entropy_arr).squeeze())
+
+        actor_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean() - self.entropy_coeff * entropy_val
         actor_loss.backward()
         self.actor_optimizer.step()
 
