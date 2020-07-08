@@ -73,7 +73,7 @@ class A2CAgentV2:
     Loss of the value function will be based on the rewards to go, rather than the advantage.
     """
 
-    def __init__(self, env, hidden_size=64, gamma=0.99, actor_lr=0.01, critic_lr=0.01):
+    def __init__(self, env, hidden_size=64, gamma=0.95, actor_lr=0.01, critic_lr=0.01):
         """
         init actor and critic networks
         init weights of actor and critic networks
@@ -236,15 +236,30 @@ agent = A2CAgentV2(env)
 # s_new, r, d, info = env.step(agent.choose_action(s))
 
 epochs = int(1e6)
+logging_interval = 100
+
+avg_ep_len_arr = []
+avg_policy_loss_arr = []
+avg_value_loss_arr = []
+avg_return_arr = []
 for i in range(epochs):
-    poli_loss, pog, rew_arr, e_len, q_log_arr, adv_log_arr, val_log_arr = agent.train()
+    poli_loss, val_loss, rew_arr, e_len, q_log_arr, adv_log_arr, val_log_arr = agent.train()
     # print(sum(r_arr))
-    if i % 100 == 0:
-        print('epoch: %3d \t policy loss: %.3f \t value fn loss: %.3f \t return: %.3f \t avg_ep_len: %.3f' %
-              (i, poli_loss, pog, sum(rew_arr), e_len))
+    avg_ep_len_arr.append(e_len)
+    avg_policy_loss_arr.append(poli_loss)
+    avg_value_loss_arr.append(val_loss)
+    avg_return_arr.append(sum(rew_arr))
+    if i % logging_interval == 0:
+        print('epoch: %3d \t avg policy loss: %.3f \t avg value fn loss: %.3f \t avg return: %.3f \t avg_ep_len: %.3f' %
+              (i, np.average(avg_policy_loss_arr), np.average(avg_value_loss_arr), np.average(avg_return_arr), np.average(avg_ep_len_arr)))
         # print('q arr:')
         # print(q_log_arr)
         # print('adv arr:')
         # print(adv_log_arr)
         # print('val arr:')
         # print(val_log_arr)
+        avg_ep_len_arr = []
+        avg_policy_loss_arr = []
+        avg_value_loss_arr = []
+        avg_return_arr = []
+
