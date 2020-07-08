@@ -189,9 +189,10 @@ class A2CAgentV2:
 
                 q_arr.insert(0, torch.zeros_like(value_arr[0]))
             else:
-                adv = rewards_arr[t + 1] + value_arr[t + 1] - value_arr[t]
+                # is it total_return or rewards_arr[t] ??? it
+                adv = rewards_arr[t] + (self.gamma**(t+1)) * value_arr[t + 1] - (self.gamma ** t) * value_arr[t]
 
-                q_arr.insert(0, rewards_arr[t + 1] + value_arr[t + 1])
+                q_arr.insert(0, rewards_arr[t] + value_arr[t + 1])
 
             adv_arr.insert(0, adv)
 
@@ -218,6 +219,8 @@ class A2CAgentV2:
         # print((torch.stack(value_arr).squeeze() - torch.tensor(return_arr).to(self.critic.device)).shape)
         # print(((torch.stack(value_arr).squeeze() - torch.tensor(return_arr).to(self.critic.device)) ** 2).shape)
         critic_loss = ((torch.stack(value_arr).squeeze() - torch.tensor(return_arr).to(self.critic.device)) ** 2).mean()
+        # lol same thing
+        # critic_loss = ((torch.tensor(return_arr).to(self.critic.device) - torch.stack(value_arr).squeeze()) ** 2).mean()
         critic_loss.backward()
         self.critic_optimizer.step()
 
