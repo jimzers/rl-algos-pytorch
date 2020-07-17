@@ -79,7 +79,7 @@ class PPOAgent:
     Loss of the value function will be based on the rewards to go, rather than the advantage.
     """
 
-    def __init__(self, env, hidden_size=64, gamma=0.99, actor_lr=0.01, critic_lr=0.01):
+    def __init__(self, env, epsilon=0.5, hidden_size=64, entropy_coeff=0.01, gamma=0.99, actor_lr=0.01, critic_lr=0.01):
         """
         init actor and critic networks
         init weights of actor and critic networks
@@ -93,15 +93,31 @@ class PPOAgent:
         self.low = env.action_space.low
         self.high = env.action_space.high
 
+        self.epsilon = epsilon
+        self.upper_lim = 1 + epsilon
+        self.lower_lim = 1 - epsilon
+
+        self.update_counter = 0
+        self.network_transfer_epochs = 1
+
         self.gamma = gamma
+        self.entropy_coeff = entropy_coeff
 
         self.actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim)
         self.actor = self.actor.to(self.actor.device)
         self.actor.apply(init_xav_weights)
+
+        self.old_actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim)
+        self.old_actor = self.old_actor.to(self.old_actor.device)
+
+        self.copy_network_params()
+
+
         self.critic = CriticNetwork(self.input_dim, hidden_size)
         self.critic = self.critic.to(self.critic.device)
         self.critic.apply(init_xav_weights)
 
+        # no need for old actor optimizer, it just holds weights
         self.actor_optimizer = Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = Adam(self.critic.parameters(), lr=critic_lr)
 
@@ -110,17 +126,26 @@ class PPOAgent:
         Choose an action given observation
         """
         # turn off gradient tracking
-        self.actor.eval()
+        self.old_actor.eval()
         obs = torch.tensor(state, dtype=torch.float).to(self.actor.device)
         # get action from actor
-        dist, _ = self.actor(obs)
+        dist, _ = self.old_actor(obs)
         action = dist.sample()
         action = action.cpu().detach().numpy()
 
         # reactivate gradient tracking
-        self.actor.train()
+        self.old_actor.train()
 
         return np.clip(action, self.low, self.high)
+
+    def copy_network_params(self):
+        """
+        Copies current actor parameters to store in old actor.
+        """
+        # for old_param, param in zip(self.old_actor.parameters(), self.actor.parameters()):
+        #     old_param.data.copy_(param.data)
+
+        self.old_actor.load_state_dict(self.actor.state_dict())
 
     def train(self):
         """
@@ -132,13 +157,45 @@ class PPOAgent:
 
         Refit the baseline fn (value fn) on the returns, not the advantage. Stronger learning signal!
 
-        PLEASE STORE STUFF IN LISTS! IF YOU STORE IN NUMPY ARRAYS THE GRADIENTS WILL GET WIPED OUT
+        Things to store / log:
+        Store the OLD policy
+        KL divergence - first order approx, mean policies (to get entropy)
+        implement entropy error??
+
+        tf version:
+        https://github.com/magnusja/ppo/blob/98423cb6353bebdbac5e9bd18ef4faafc096f9ca/src/policy.py#L114
+
+        Clip version
+        step 1: get pg ratio (in regular form, not log likelihoods!)
+        step 2: do the pg ratio logic ( do minimum of either the clipped or regular after multiplication w/ advantage)
+        step 3: the loss is the negative of the result of the minimum.
+
+        KL penalty version
+        Three loss terms
+        1. pg ratios (not in log form!!) times advantages
+        2. delta (some constant) times KL divergence
+        3. hinge loss on D_KL - kl_targ => only when distributed...
+
+        objective function J_ppo = 1 - 2 - 3
+
+        How to get KL divergence?
+        Steps:
+        sum the ratios of pi and old pi...
+        let lp be log prob old and lp_n be log prob new
+        you can do this through sum(exp(lp_n - lp
+
+        Run thru feed dict once at start of update, call these dist means / dist log stds the OLD log means / vars
+
+        NEED SOMETHING TO KEEP TRACK OF FIRST ITERATION (SO WE HOLD OFF ON COPYING)
 
         """
 
         rewards_arr = []
+        old_log_prob_arr = []
         log_prob_arr = []
         value_arr = []
+
+        entropy_val = None
 
         obs = self.env.reset()
         done = False
@@ -152,10 +209,20 @@ class PPOAgent:
             rewards_arr.append(r)
 
             # store log prob
-            _, log_prob = self.actor(torch.tensor(obs, dtype=torch.float32).to(self.actor.device),
+            dist, log_prob = self.actor(torch.tensor(obs, dtype=torch.float32).to(self.actor.device),
                                                    torch.tensor(action, dtype=torch.float32).to(self.actor.device))
 
             log_prob_arr.append(log_prob)
+
+            old_dist, old_log_prob = self.old_actor(torch.tensor(obs, dtype=torch.float32).to(self.old_actor.device),
+                                                   torch.tensor(action, dtype=torch.float32).to(self.old_actor.device))
+
+            old_log_prob_arr.append(old_log_prob)
+
+            # entropy is based on standard deviation.
+            # the std stays the same until actor is updated so no need to recalc
+            if entropy_val == None:
+                entropy_val = dist.entropy()
 
             # value estimate at current state
             value_est = self.critic(torch.tensor(obs, dtype=torch.float32).to(self.critic.device))
@@ -175,20 +242,7 @@ class PPOAgent:
         # for debugging
         q_arr = []
 
-        # check shapes of rewards and value arrays for broadcasting errors
-        # print('REWARDS ARRAY Single ELem')
-        # print(rewards_arr[0])
-        # print('VALUE ARRAY SHAPE')
-        # print(value_arr[0].shape)
-        # get rewards to go and advantages
-
-        # TODO: deal with the problem of the last episode having terrible performance
         for t in reversed(range(len(value_arr))):
-
-            # todo: add gamma here if you want. make sure gamma is based on num of timesteps surpassed
-            # print('RETURN VALUE')
-            # print(rewards_arr[t])
-            # print('BRUH')
             total_return = rewards_arr[t] + self.gamma * total_return
             return_arr.insert(0, total_return)
 
@@ -197,22 +251,69 @@ class PPOAgent:
 
                 q_arr.insert(0, torch.zeros_like(value_arr[0]))
             else:
-                adv = rewards_arr[t + 1] + value_arr[t + 1] - value_arr[t]
+                adv = rewards_arr[t] + self.gamma * value_arr[t + 1] - value_arr[t]
 
-                q_arr.insert(0, rewards_arr[t + 1] + value_arr[t + 1])
+                q_arr.insert(0, rewards_arr[t] + value_arr[t + 1])
 
             adv_arr.insert(0, adv)
 
-        self.actor_optimizer.zero_grad()
-        # print('DEBUG MORE STUFGF')
-        # print(torch.stack(log_prob_arr).shape)
-        # print(torch.stack(adv_arr).squeeze().detach().shape)
-        # print('POGCHMPION STUFF')
-        # print(torch.stack(log_prob_arr))
-        # print((torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).shape)
-        actor_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean()
+        # # copy actor network before updating
+        # # TODO: ANALYZE IF THIS AFFECTS THE GRAD. If so, wait until RIGHT after backward to update the old network
+        # self.copy_network_params()
+        #
+        # self.actor_optimizer.zero_grad()
+
+
+        # if epsilon then clipping range exists
+        if self.epsilon:
+            # print('ANOTHER ROUND')
+            # print(torch.stack(old_log_prob_arr))
+            # print(torch.stack(log_prob_arr))
+            # print(torch.stack(old_log_prob_arr).shape)
+            # print(torch.stack(log_prob_arr).shape)
+
+            # important: we detach old log probs because we only want our current step to have gardients
+            # print('LOG PROBS AND RATIOS')
+            # print(torch.stack(log_prob_arr))
+            # print(torch.stack(old_log_prob_arr).detach())
+            pg_ratio = torch.exp(torch.stack(log_prob_arr) - torch.stack(old_log_prob_arr).detach())
+            print('RATIOS')
+            print(pg_ratio)
+            print(pg_ratio.shape)
+            pg_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean()
+
+            unclipped_loss = pg_ratio * torch.stack(adv_arr).squeeze().detach()
+            print("unclipped loss")
+            print(unclipped_loss)
+            print(unclipped_loss.shape)
+            clipped_loss = torch.clamp(pg_ratio, 1 - self.epsilon, 1 + self.epsilon) * torch.stack(adv_arr).squeeze().detach()
+            print("clipped loss")
+            print(clipped_loss)
+            print(clipped_loss.shape)
+
+            """
+            FOR ADVANTAGE YOU'RE SUPPOSED TO USE THE OLD POLICY TO GRAB ADVANTAGE
+            """
+
+            actor_loss = -torch.min(unclipped_loss, clipped_loss).mean()
+
+            # actor_loss = -torch.min((pg_ratio * torch.stack(adv_arr).squeeze().detach()).mean(), (torch.clamp(pg_ratio, 1 - self.epsilon, 1 + self.epsilon) * torch.stack(adv_arr).squeeze().detach()).mean())
+            # actor_loss = -(torch.clamp(pg_ratio, 1 - self.epsilon, 1 + self.epsilon) * torch.stack(
+            #     adv_arr).squeeze().detach()).mean()
+            # https://github.com/Khrylx/PyTorch-RL/blob/d94e1479403b2b918294d6e9b0dc7869e893aa1b/core/a2c.py#L4
+
+        # else:  # KL divergence method here:
+        #     pg_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean()
+
         actor_loss.backward()
+        # copy actor network before updating
+        # TODO: ANALYZE IF THIS AFFECTS THE GRAD. If so, wait until RIGHT after backward to update the old network
+        # self.copy_network_params()
         self.actor_optimizer.step()
+
+        self.update_counter += 1
+        if self.update_counter % self.network_transfer_epochs == 0:
+            self.copy_network_params()
 
         # TODO: print shapes of rewards to go and value array
         # print('VALUE FN STACKED')
