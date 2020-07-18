@@ -98,7 +98,7 @@ class PPOAgent:
         self.lower_lim = 1 - epsilon
 
         self.update_counter = 0
-        self.network_transfer_epochs = 1
+        self.network_transfer_epochs = 80
 
         self.gamma = gamma
         self.entropy_coeff = entropy_coeff
@@ -261,7 +261,7 @@ class PPOAgent:
         # # TODO: ANALYZE IF THIS AFFECTS THE GRAD. If so, wait until RIGHT after backward to update the old network
         # self.copy_network_params()
         #
-        # self.actor_optimizer.zero_grad()
+        self.actor_optimizer.zero_grad()
 
 
         # if epsilon then clipping range exists
@@ -277,19 +277,19 @@ class PPOAgent:
             # print(torch.stack(log_prob_arr))
             # print(torch.stack(old_log_prob_arr).detach())
             pg_ratio = torch.exp(torch.stack(log_prob_arr) - torch.stack(old_log_prob_arr).detach())
-            print('RATIOS')
-            print(pg_ratio)
-            print(pg_ratio.shape)
-            pg_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean()
+            # print('RATIOS')
+            # print(pg_ratio)
+            # print(pg_ratio.shape)
+            # pg_loss = -(torch.stack(log_prob_arr) * torch.stack(adv_arr).squeeze().detach()).mean()
 
             unclipped_loss = pg_ratio * torch.stack(adv_arr).squeeze().detach()
-            print("unclipped loss")
-            print(unclipped_loss)
-            print(unclipped_loss.shape)
+            # print("unclipped loss")
+            # print(unclipped_loss)
+            # print(unclipped_loss.shape)
             clipped_loss = torch.clamp(pg_ratio, 1 - self.epsilon, 1 + self.epsilon) * torch.stack(adv_arr).squeeze().detach()
-            print("clipped loss")
-            print(clipped_loss)
-            print(clipped_loss.shape)
+            # print("clipped loss")
+            # print(clipped_loss)
+            # print(clipped_loss.shape)
 
             """
             FOR ADVANTAGE YOU'RE SUPPOSED TO USE THE OLD POLICY TO GRAB ADVANTAGE
@@ -309,18 +309,21 @@ class PPOAgent:
         # copy actor network before updating
         # TODO: ANALYZE IF THIS AFFECTS THE GRAD. If so, wait until RIGHT after backward to update the old network
         # self.copy_network_params()
-        self.actor_optimizer.step()
-
         self.update_counter += 1
         if self.update_counter % self.network_transfer_epochs == 0:
             self.copy_network_params()
+        self.actor_optimizer.step()
+
+        # self.update_counter += 1
+        # if self.update_counter % self.network_transfer_epochs == 0:
+        #     self.copy_network_params()
 
         # TODO: print shapes of rewards to go and value array
         # print('VALUE FN STACKED')
         # print(torch.stack(value_arr).shape)
         # print('REWARDS TO GO')
         # print(torch.tensor(return_arr).shape)
-
+# it might be that it's updating every step, but that's not suppossed to happen here. every time it updates, it runs a round with the episodes
         #TODO : see shapes here again. the critic loss is struggling here
         self.critic_optimizer.zero_grad()
         # print('POGCHAMP')
