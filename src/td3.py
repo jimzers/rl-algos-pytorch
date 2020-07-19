@@ -38,3 +38,48 @@ class ReplayBuffer:
 
 
 
+class ActorNetwork(nn.Module):
+    """
+    Deterministic actor.
+    Note: make sure to add batch normalization!
+    """
+    def __init__(self, obs_dim, hidden_size, action_dim, act_noise):
+        super(ActorNetwork, self).__init__()
+        self.fc1 = nn.Linear(obs_dim, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)  # keep it simple just 3 fully connected layers
+        self.fc3 = nn.Linear(hidden_size, action_dim)
+
+        self.bnorm1 = nn.BatchNorm1d(hidden_size)
+        self.bnorm2 = nn.BatchNorm1d(hidden_size)
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def forward(self, state):
+        x = self.fc1(state)
+        x = F.relu(x)
+        x = self.bnorm1(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.bnorm2(x)
+        x = self.fc3(x)  # no non-linearities / normalization after this
+        res = torch.tanh(x)  # to ensure result is bound within -1, 1
+        # TODO: IF THERE'S AN ISSUE WITH LOWER / UPPER LIMITS OF ACTION SPACE (E.G. ACTOR NOT GOING TO ANY EXTREME LIMITS),
+        # THEN THE ACTOR NEEDS A DIFFERENT WAY TO BOUND (torch clamp? multiplication scale?)
+
+        return res
+
+
+class CriticNetwork(nn.Module):
+    def __init__(self, obs_dim, hidden_size, value_dim=1):
+        super(CriticNetwork, self).__init__()
+        self.fc1 = nn.Linear(obs_dim, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)  # keep it simple just 3 fully connected layers
+        self.fc3 = nn.Linear(hidden_size, value_dim)
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def forward(self, state):
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+        output = self.fc3(x)  # personal choice for no activation fn on last layer...
+        return output
