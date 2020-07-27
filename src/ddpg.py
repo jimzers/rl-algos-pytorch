@@ -46,7 +46,7 @@ class ActorNetwork(nn.Module):
     Deterministic actor.
     Note: make sure to add batch normalization!
     """
-    def __init__(self, obs_dim, hidden_size, action_dim, filename='td3_actor'):
+    def __init__(self, obs_dim, hidden_size, action_dim, filename='ddpg_actor'):
         super(ActorNetwork, self).__init__()
         self.fc1 = nn.Linear(obs_dim, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)  # keep it simple just 3 fully connected layers
@@ -82,7 +82,7 @@ class ActorNetwork(nn.Module):
 
 
 class CriticNetwork(nn.Module):
-    def __init__(self, combined_dim, hidden_size, value_dim=1, filename='td3_critic'):
+    def __init__(self, combined_dim, hidden_size, value_dim=1, filename='ddpg_critic'):
         super(CriticNetwork, self).__init__()
         self.fc1 = nn.Linear(combined_dim, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)  # keep it simple just 3 fully connected layers
@@ -152,19 +152,19 @@ class DDPGAgent:
         self.memory = ReplayBuffer(1000000, [self.input_dim], self.action_dim)
 
 
-        self.actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim, filename='td3_actor')
+        self.actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim, filename='ddpg_actor')
         self.actor = self.actor.to(self.actor.device)
         self.actor.apply(init_xav_weights)
 
-        self.target_actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim, filename='td3_target_actor')
+        self.target_actor = ActorNetwork(self.input_dim, hidden_size, self.action_dim, filename='ddpg_target_actor')
         self.target_actor = self.target_actor.to(self.target_actor.device)
         self.target_actor.apply(init_xav_weights)
 
-        self.critic = CriticNetwork(self.input_dim + self.action_dim, hidden_size, filename='td3_critic')
+        self.critic = CriticNetwork(self.input_dim + self.action_dim, hidden_size, filename='ddpg_critic')
         self.critic = self.critic.to(self.critic.device)
         self.critic.apply(init_xav_weights)
 
-        self.target_critic = CriticNetwork(self.input_dim + self.action_dim, hidden_size, filename='td3_target_critic')
+        self.target_critic = CriticNetwork(self.input_dim + self.action_dim, hidden_size, filename='ddpg_target_critic')
         self.target_critic = self.target_critic.to(self.target_critic.device)
         self.target_critic.apply(init_xav_weights)
 
