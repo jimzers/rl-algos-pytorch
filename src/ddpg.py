@@ -221,8 +221,12 @@ class DDPGAgent:
 
         # get target actions to use on target critic network
         target_actions = self.target_actor.forward(new_state)
+        # print("lol")
+        # print(target_actions)
+        # print(new_state)
         # TODO: probably have to squeeze these networks
         critic_val_new = self.target_critic.forward(new_state, target_actions)
+        # print(critic_val_new)
         critic_val = self.critic.forward(state, action)
 
         # todo: see shape
@@ -260,18 +264,18 @@ class DDPGAgent:
 
         while not done:
             action = self.choose_action(state)
-            next_state, rew, done, info = self.env.step(action)
-            self.store(state, action, rew, next_state, int(done))
+            next_state, r, done, info = self.env.step(action)
+            self.store(state, action, r, next_state, int(done))
             learn_res = self.learn()
             if learn_res != None:
                 actor_loss, critic_loss, rew, target_reward, critic_val, critic_val_new = learn_res
-            score += rew
+            score += r
             state = next_state
         if learn_res is not None:
             self.save_models()
             return actor_loss, critic_loss, rew, target_reward, critic_val, critic_val_new, score, self.tau
         else:
-            print('one training step done')
+            # print('one training step done')
             return
 
 
@@ -329,7 +333,7 @@ for i in range(epochs):
         target_reward_arr.append(target_rewardz.cpu().detach().numpy())
         critic_val_arr.append(critic_valz.cpu().detach().numpy())
         critic_val_new_arr.append(critic_val_newz.cpu().detach().numpy())
-        eps_score_arr.append(sum(eps_scorez).cpu().detach())
+        eps_score_arr.append(eps_scorez)
         tau_arr.append(tau_valz)
 
         if i % logging_interval == 0:
