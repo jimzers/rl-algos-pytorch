@@ -40,7 +40,7 @@ class ActorNetwork(nn.Module):
         # if there's an action
         policy_dist = self.distribution(state)
         log_prob = None
-        if action:
+        if action is not None:
             # TODO: fix the action here if it's not in the right format
             log_prob = policy_dist.log_prob(action).sum(axis=-1)
         return policy_dist, log_prob
@@ -79,7 +79,7 @@ class PPOAgent:
     Loss of the value function will be based on the rewards to go, rather than the advantage.
     """
 
-    def __init__(self, env, epsilon=0.5, hidden_size=64, entropy_coeff=0.01, gamma=0.99, actor_lr=0.01, critic_lr=0.01):
+    def __init__(self, env, epsilon=0.5, hidden_size=64, entropy_coeff=0.01, gamma=0.999, actor_lr=0.01, critic_lr=0.01):
         """
         init actor and critic networks
         init weights of actor and critic networks
@@ -333,7 +333,7 @@ class PPOAgent:
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(rewards_arr), q_arr, adv_arr, value_arr
+        return actor_loss.cpu().detach().numpy(), critic_loss.cpu().detach().numpy(), rewards_arr, len(rewards_arr), q_arr, adv_arr, value_arr, return_arr
 
 import gym
 
@@ -352,7 +352,7 @@ avg_policy_loss_arr = []
 avg_value_loss_arr = []
 avg_return_arr = []
 for i in range(epochs):
-    poli_loss, val_loss, rew_arr, e_len, q_log_arr, adv_log_arr, val_log_arr = agent.train()
+    poli_loss, val_loss, rew_arr, e_len, q_log_arr, adv_log_arr, val_log_arr, rtg_arr = agent.train()
     # print(sum(r_arr))
     avg_ep_len_arr.append(e_len)
     avg_policy_loss_arr.append(poli_loss)
@@ -362,7 +362,9 @@ for i in range(epochs):
         print('epoch: %3d \t avg policy loss: %.3f \t avg value fn loss: %.3f \t avg return: %.3f \t avg_ep_len: %.3f' %
               (i, np.average(avg_policy_loss_arr), np.average(avg_value_loss_arr), np.average(avg_return_arr), np.average(avg_ep_len_arr)))
         # print('q arr:')
-        # print(q_log_arr)
+        # print(torch.stack(q_log_arr).squeeze().cpu().detach().numpy())
+        # print('rtg arr:')
+        # print(rtg_arr)
         # print('adv arr:')
         # print(adv_log_arr)
         # print('val arr:')
