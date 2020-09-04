@@ -66,3 +66,5 @@ Note: WIP
 ### [SAC](https://arxiv.org/abs/1801.01290)
 
 Emphasis on entropy term inside loss (scaled by temperature term alpha - set to constant in this implementation)
+
+Note: WIP
